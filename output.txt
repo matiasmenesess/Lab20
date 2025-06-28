@@ -1,0 +1,16 @@
+fun void main()
+ var int a;
+ var int x;
+ var int y;
+ var int z;
+ var int t;
+ x = 2;
+ y = 3;
+ z = 2;
+ t=y*z
+ a = 17;
+ while x<7 do
+ a[t] = 1
+ endwhile
+ return(0)
+endfun
