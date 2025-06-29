@@ -67,73 +67,54 @@ class CodeOptimizer:
             result_lines.append(original_line)
         
         return '\n'.join(result_lines)
-    
+
     def code_hoisting(self, code: str) -> str:
         lines = code.split('\n')
-        assignments = self.extract_assignments(code)
         result_lines = []
-        hoisted_declarations = []
-        hoisted_assignments = []
-        hoisted_vars_used = []
-        for i, line in enumerate(lines):
-            original_line = line
-            line = line.strip()
-            
-            if '[' in line and ']' in line:
-                match = re.search(r'\[([^\]]+)\]', line)
-                if match:
-                    bracket_expr = match.group(1)
-                    
-                    result = self.evaluate_expression(bracket_expr, assignments)
-                    if result is not None:
-                        temp_var = 't'
-                        temp_declaration = f" var int {temp_var};"
-                        temp_assignment = f" {temp_var}={bracket_expr}"
-                        
-                        vars_in_expr = []
-                        for var in assignments.keys():
-                            if var in bracket_expr:
-                                vars_in_expr.append(var)
-                        
-                        new_line = line.replace(f'[{bracket_expr}]', f'[{temp_var}]')
-                        
-                        if temp_declaration not in hoisted_declarations:
-                            hoisted_declarations.append(temp_declaration)
-                            hoisted_assignments.append(temp_assignment)
-                            hoisted_vars_used.extend(vars_in_expr)
-                        
-                        result_lines.append(' ' + new_line)
-                        continue
-            
-            result_lines.append(original_line)
-        
-        final_lines = []
-        last_var_index = -1
-        last_assignment_of_used_vars = -1
-        
-        for i, line in enumerate(result_lines):
-            if line.strip().startswith('var int'):
-                last_var_index = i
-        
-        for i, line in enumerate(result_lines):
-            line_stripped = line.strip()
-            if '=' in line_stripped and not line_stripped.startswith('var'):
-                var_name = line_stripped.split('=')[0].strip()
-                if var_name in hoisted_vars_used:
-                    last_assignment_of_used_vars = max(last_assignment_of_used_vars, i)
-        
-        for i, line in enumerate(result_lines):
-            final_lines.append(line)
-            
-            if i == last_var_index and hoisted_declarations:
-                for declaration in hoisted_declarations:
-                    final_lines.append(declaration)
-            
-            if i == last_assignment_of_used_vars and hoisted_assignments:
-                for assignment in hoisted_assignments:
-                    final_lines.append(assignment)
-        
-        return '\n'.join(final_lines)
+
+        inside_loop = False
+        loop_start_idx = None
+        hoisted_lines = []
+
+        i = 0
+        while i < len(lines):
+            line = lines[i].rstrip()
+            stripped = line.strip()
+
+            if stripped.startswith("while ") or stripped.startswith("for "):
+                inside_loop = True
+                loop_start_idx = i
+                result_lines.append(line)
+                i += 1
+                continue
+
+            if inside_loop and (stripped.startswith("endwhile") or stripped.startswith("endfor")):
+                inside_loop = False
+
+                if hoisted_lines:
+                    result_lines = result_lines[:loop_start_idx] + hoisted_lines + result_lines[loop_start_idx:]
+                    hoisted_lines = []
+                    i += len(hoisted_lines)
+
+                result_lines.append(line)
+                i += 1
+                continue
+
+            if inside_loop and '=' in stripped and not stripped.startswith('var'):
+                var_name = stripped.split('=')[0].strip()
+                expr = '='.join(stripped.split('=')[1:]).strip().rstrip(';')
+
+                val = self.evaluate_expression(expr, self.extract_assignments(code))
+                if val is not None:
+                    hoisted_lines.append(f" {var_name} = {val};")
+                    i += 1
+                    continue
+
+            result_lines.append(line)
+            i += 1
+
+        return '\n'.join(result_lines)
+
     
     def optimize_code(self, input_file: str, output_file: str = None):
         code = self.parse_file(input_file)
@@ -161,18 +142,21 @@ class CodeOptimizer:
         return optimized_code
 
 def create_input_file():
-    input_code = """fun void main()
- var int a;
- var int x;
- var int y;
- var int z;
- x = 2;
- y=3;
- z=2;
- a = 5*3+2;
- while x<7 do
-    a[y*z] = 1
- endwhile
+    input_code = """fun int main()
+ var int i, j, x, y, z, sum, temp;
+
+ x = 10;
+ y = 5;
+ z = 3;
+ sum = 0;
+ i = 0;
+
+ while i < 3 do
+  temp = x * y + z;
+  sum = sum + temp;
+  i = i + 1
+ endwhile;
+ print(sum);
  return(0)
 endfun"""
     
